@@ -1,0 +1,351 @@
+import javax.swing.*;
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class Scavenger extends JFrame {
+    private int health = 100, energy = 100, scrap = 0, rations = 3, day = 1;
+    private int weaponPower = 1;
+    private final int GRID_SIZE = 7;
+    private int playerX = 3, playerY = 3;
+    private JLabel[][] grid = new JLabel[GRID_SIZE][GRID_SIZE];
+    private boolean[][] revealed = new boolean[GRID_SIZE][GRID_SIZE];
+    private List<Enemy> enemiesOnMap = new ArrayList<>();
+    private Random rand = new Random();
+    private JProgressBar healthBar, energyBar;
+    private JLabel dayLabel, invLabel, weaponLabel;
+    private JTextArea logArea;
+    private JPanel combatPanel, mainGamePanel;
+    private ImageIcon playerIcon, dogIcon, raiderIcon, thugIcon, groundIcon, unknownIcon;
+
+    public Scavenger() {
+        setTitle("Scavenger");
+        setSize(1000, 750);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+        setLayout(new CardLayout());
+        try {
+            playerIcon = new ImageIcon(
+                    new ImageIcon("Player.png").getImage().getScaledInstance(60, 60, Image.SCALE_SMOOTH));
+            ImageIcon customHostile = new ImageIcon(
+                    new ImageIcon("Hostile.png").getImage().getScaledInstance(60, 60, Image.SCALE_SMOOTH));
+            dogIcon = customHostile;
+            raiderIcon = customHostile;
+            thugIcon = customHostile;
+        } catch (Exception e) {
+            playerIcon = createPlaceholderIcon(Color.BLUE);
+            dogIcon = createPlaceholderIcon(new Color(139, 69, 19));
+            raiderIcon = createPlaceholderIcon(new Color(128, 0, 128));
+            thugIcon = createPlaceholderIcon(new Color(220, 20, 60));
+        }
+        groundIcon = createPlaceholderIcon(new Color(60, 60, 60));
+        unknownIcon = createPlaceholderIcon(new Color(20, 20, 20));
+        mainGamePanel = new JPanel(new BorderLayout(10, 10));
+        JPanel topPanel = new JPanel(new GridLayout(1, 2, 20, 0));
+        topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        healthBar = createBar(Color.RED, "Health");
+        energyBar = createBar(Color.CYAN, "Energy");
+        topPanel.add(healthBar);
+        topPanel.add(energyBar);
+        mainGamePanel.add(topPanel, BorderLayout.NORTH);
+        JPanel mapPanel = new JPanel(new GridLayout(GRID_SIZE, GRID_SIZE, 1, 1));
+        mapPanel.setBackground(Color.BLACK);
+        for (int r = 0; r < GRID_SIZE; r++) {
+            for (int c = 0; c < GRID_SIZE; c++) {
+                grid[r][c] = new JLabel(unknownIcon, SwingConstants.CENTER);
+                mapPanel.add(grid[r][c]);
+            }
+        }
+        mainGamePanel.add(mapPanel, BorderLayout.CENTER);
+        JPanel rightPanel = new JPanel();
+        rightPanel.setLayout(new BoxLayout(rightPanel, BoxLayout.Y_AXIS));
+        rightPanel.setPreferredSize(new Dimension(280, 0));
+        rightPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+        dayLabel = new JLabel("CYCLE: 1 / 10");
+        dayLabel.setFont(new Font("Monospaced", Font.BOLD, 24));
+        invLabel = new JLabel("<html>Rations: 3<br>Scrap: 0</html>");
+        weaponLabel = new JLabel("Weapon Power: Lvl 1");
+        weaponLabel.setForeground(Color.BLUE);
+        JPanel movePanel = new JPanel(new BorderLayout());
+        JButton up = new JButton("UP"), down = new JButton("DOWN");
+        JButton left = new JButton("LEFT"), right = new JButton("RIGHT");
+        movePanel.add(up, BorderLayout.NORTH);
+        movePanel.add(down, BorderLayout.SOUTH);
+        movePanel.add(left, BorderLayout.WEST);
+        movePanel.add(right, BorderLayout.EAST);
+        JButton upgradeBtn = new JButton("UPGRADE GEAR (5 Scrap)");
+        JButton restBtn = new JButton("REST & END CYCLE");
+        rightPanel.add(dayLabel);
+        rightPanel.add(invLabel);
+        rightPanel.add(weaponLabel);
+        rightPanel.add(Box.createRigidArea(new Dimension(0, 20)));
+        rightPanel.add(movePanel);
+        rightPanel.add(Box.createRigidArea(new Dimension(0, 20)));
+        rightPanel.add(upgradeBtn);
+        rightPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        rightPanel.add(restBtn);
+        mainGamePanel.add(rightPanel, BorderLayout.EAST);
+        logArea = new JTextArea(8, 20);
+        logArea.setEditable(false);
+        logArea.setBackground(new Color(15, 20, 15));
+        logArea.setForeground(new Color(50, 255, 50));
+        JScrollPane scroll = new JScrollPane(logArea);
+        mainGamePanel.add(scroll, BorderLayout.SOUTH);
+        combatPanel = new JPanel();
+        combatPanel.setLayout(new BorderLayout(20, 20));
+        combatPanel.setBackground(new Color(30, 0, 0));
+        add(mainGamePanel, "game");
+        add(combatPanel, "combat");
+        up.addActionListener(e -> movePlayer(-1, 0));
+        down.addActionListener(e -> movePlayer(1, 0));
+        left.addActionListener(e -> movePlayer(0, -1));
+        right.addActionListener(e -> movePlayer(0, 1));
+        upgradeBtn.addActionListener(e -> upgradeGear());
+        restBtn.addActionListener(e -> processEndDay());
+        generateEnemies();
+        revealed[playerX][playerY] = true;
+        updateMap();
+        log("SCAVENGER IS ONLINE. Hostiles carry the most rations.");
+    }
+
+    private ImageIcon createPlaceholderIcon(Color color) {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(60, 60,
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        Graphics g = image.getGraphics();
+        g.setColor(color);
+        g.fillRect(0, 0, 60, 60);
+        g.dispose();
+        return new ImageIcon(image);
+    }
+
+    private JProgressBar createBar(Color c, String text) {
+        JProgressBar b = new JProgressBar(0, 100);
+        b.setValue(100);
+        b.setForeground(c);
+        b.setStringPainted(true);
+        b.setString(text);
+        return b;
+    }
+
+    private void generateEnemies() {
+        enemiesOnMap.clear();
+        int numEnemies = rand.nextInt(3) + 3;
+        for (int i = 0; i < numEnemies; i++) {
+            int r, c;
+            do {
+                r = rand.nextInt(GRID_SIZE);
+                c = rand.nextInt(GRID_SIZE);
+            } while (r == playerX && c == playerY);
+            int type = rand.nextInt(3);
+            if (type == 0)
+                enemiesOnMap.add(new Enemy("Scavenger Hound", dogIcon, -0.1, 3, r, c));
+            else if (type == 1)
+                enemiesOnMap.add(new Enemy("Bandit Raider", raiderIcon, 0.1, 7, r, c));
+            else
+                enemiesOnMap.add(new Enemy("Mutated Thug", thugIcon, 0.3, 12, r, c));
+        }
+    }
+
+    private void movePlayer(int dr, int dc) {
+        int newR = playerX + dr;
+        int newC = playerY + dc;
+        if (newR >= 0 && newR < GRID_SIZE && newC >= 0 && newC < GRID_SIZE) {
+            if (energy >= 15) {
+                playerX = newR;
+                playerY = newC;
+                energy -= 15;
+                revealed[playerX][playerY] = true;
+                checkTileEvent();
+                updateMap();
+            } else {
+                log("!! Energy low. Rest required.");
+            }
+        }
+    }
+
+    private void checkTileEvent() {
+        Enemy encounteredEnemy = null;
+        for (Enemy e : enemiesOnMap) {
+            if (e.r == playerX && e.c == playerY) {
+                encounteredEnemy = e;
+                break;
+            }
+        }
+        if (encounteredEnemy != null)
+            startCombatScreen(encounteredEnemy);
+        else {
+            int lootChance = rand.nextInt(100);
+            if (lootChance < 10) {
+                rations++;
+                log("+ Found a rare ration pack buried in the dirt!");
+            } else if (lootChance < 40) {
+                scrap += rand.nextInt(3) + 1;
+                log("+ Scrap salvaged from the debris.");
+            }
+        }
+    }
+
+    private void startCombatScreen(Enemy enemy) {
+        combatPanel.removeAll();
+        JLabel header = new JLabel("HOSTILE ENCOUNTER", SwingConstants.CENTER);
+        header.setFont(new Font("Impact", Font.PLAIN, 32));
+        header.setForeground(Color.RED);
+        combatPanel.add(header, BorderLayout.NORTH);
+        JPanel centerPanel = new JPanel(new GridLayout(1, 2, 10, 10));
+        centerPanel.setOpaque(false);
+        centerPanel.add(new JLabel(enemy.icon, SwingConstants.CENTER));
+        JTextArea combatLog = new JTextArea(10, 20);
+        combatLog.setEditable(false);
+        combatLog.setBackground(Color.BLACK);
+        combatLog.setForeground(Color.RED);
+        combatLog.append(">> " + enemy.name.toUpperCase() + " spotted. They look like they're guarding supplies.\n");
+        centerPanel.add(new JScrollPane(combatLog));
+        combatPanel.add(centerPanel, BorderLayout.CENTER);
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 50, 20));
+        buttonPanel.setOpaque(false);
+        JButton fightBtn = new JButton("FIGHT");
+        JButton runBtn = new JButton("RUN");
+        buttonPanel.add(fightBtn);
+        buttonPanel.add(runBtn);
+        combatPanel.add(buttonPanel, BorderLayout.SOUTH);
+        fightBtn.addActionListener(e -> fightEnemy(enemy, combatLog));
+        runBtn.addActionListener(e -> runFromEnemy(enemy, combatLog));
+        CardLayout cl = (CardLayout) (getContentPane().getLayout());
+        cl.show(getContentPane(), "combat");
+    }
+
+    private void fightEnemy(Enemy enemy, JTextArea combatLog) {
+        double winChance = (health / 100.0) * (0.6 + (weaponPower * 0.1)) - enemy.winPenalty;
+        if (rand.nextDouble() < winChance) {
+            scrap += enemy.lootValue;
+            String bonus = "";
+            if (rand.nextInt(100) < 70) {
+                int rFound = rand.nextInt(2) + 1;
+                rations += rFound;
+                bonus = " and " + rFound + " rations!";
+            }
+            health -= (5 + rand.nextInt(10));
+            combatLog.append(">> Enemy neutralized. Secured " + enemy.lootValue + " scrap" + bonus + "\n");
+            enemiesOnMap.remove(enemy);
+        } else {
+            health -= 35;
+            combatLog.append(">> Combat failure. Critical damage sustained. They took your loot.\n");
+        }
+        checkGameOver();
+        addContinueButton();
+    }
+
+    private void runFromEnemy(Enemy enemy, JTextArea combatLog) {
+        if (rand.nextBoolean())
+            combatLog.append(">> Escape successful. You left the rations behind.\n");
+        else {
+            health -= 15;
+            combatLog.append(">> Caught while retreating. Injuries sustained!\n");
+        }
+        checkGameOver();
+        addContinueButton();
+    }
+
+    private void addContinueButton() {
+        JPanel buttonPanel = (JPanel) combatPanel.getComponent(2);
+        buttonPanel.removeAll();
+        JButton continueBtn = new JButton("BACK TO WASTELAND");
+        continueBtn.addActionListener(e -> {
+            CardLayout cl = (CardLayout) (getContentPane().getLayout());
+            cl.show(getContentPane(), "game");
+            updateUI();
+        });
+        buttonPanel.add(continueBtn);
+        combatPanel.revalidate();
+        combatPanel.repaint();
+    }
+
+    private void upgradeGear() {
+        if (scrap >= 5) {
+            scrap -= 5;
+            weaponPower++;
+            log("++ Gear Upgraded. Lethality increased.");
+            updateUI();
+        }
+    }
+
+    private void updateMap() {
+        for (int r = 0; r < GRID_SIZE; r++) {
+            for (int c = 0; c < GRID_SIZE; c++) {
+                if (r == playerX && c == playerY)
+                    grid[r][c].setIcon(playerIcon);
+                else if (revealed[r][c]) {
+                    Enemy eOnTile = null;
+                    for (Enemy e : enemiesOnMap)
+                        if (e.r == r && e.c == c)
+                            eOnTile = e;
+                    grid[r][c].setIcon(eOnTile != null ? eOnTile.icon : groundIcon);
+                } else
+                    grid[r][c].setIcon(unknownIcon);
+            }
+        }
+        updateUI();
+    }
+
+    private void updateUI() {
+        healthBar.setValue(health);
+        energyBar.setValue(energy);
+        invLabel.setText("<html>Rations: " + rations + "<br>Scrap: " + scrap + "</html>");
+        weaponLabel.setText("Weapon Power: Lvl " + weaponPower);
+    }
+
+    private void processEndDay() {
+        day++;
+        if (rations > 0) {
+            rations--;
+            health = Math.min(100, health + 10);
+            log(">> Ration consumed. Health stabilized.");
+        } else {
+            health -= 25;
+            log(">> NO RATIONS. Starvation setting in!");
+        }
+        energy = 100;
+        generateEnemies();
+        dayLabel.setText("CYCLE: " + day + " / 10");
+        if (day > 10 && health > 0) {
+            JOptionPane.showMessageDialog(this, "RESCUE ARRIVED. You survived the wasteland.");
+            System.exit(0);
+        }
+        checkGameOver();
+        updateMap();
+    }
+
+    private void checkGameOver() {
+        if (health <= 0) {
+            JOptionPane.showMessageDialog(this, "Terminated. The wasteland takes another soul.");
+            System.exit(0);
+        }
+    }
+
+    private void log(String msg) {
+        logArea.append(">> " + msg + "\n");
+        logArea.setCaretPosition(logArea.getDocument().getLength());
+    }
+
+    private class Enemy {
+        String name;
+        ImageIcon icon;
+        double winPenalty;
+        int lootValue;
+        int r, c;
+
+        public Enemy(String name, ImageIcon icon, double wp, int lv, int r, int c) {
+            this.name = name;
+            this.icon = icon;
+            this.winPenalty = wp;
+            this.lootValue = lv;
+            this.r = r;
+            this.c = c;
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new Scavenger().setVisible(true));
+    }
+}
